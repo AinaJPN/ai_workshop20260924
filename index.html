@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>みんなのひとことボード</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f6f7f9;
+      color: #222;
+      line-height: 1.6;
+    }
+
+    .container {
+      width: min(92%, 680px);
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    h1 {
+      margin: 0 0 24px;
+      font-size: clamp(1.6rem, 5vw, 2.2rem);
+      text-align: center;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    input, textarea, button {
+      width: 100%;
+      font: inherit;
+    }
+
+    input, textarea {
+      border: 1px solid #cfd4dc;
+      border-radius: 10px;
+      padding: 12px;
+      background: #fff;
+      color: #222;
+    }
+
+    input:focus, textarea:focus {
+      outline: 2px solid #b9d8ff;
+      border-color: #6ea8e8;
+    }
+
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .counter {
+      margin-top: 4px;
+      text-align: right;
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      background: #222;
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover { opacity: 0.88; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #status {
+      min-height: 1.6em;
+      margin: 10px 0 18px;
+      text-align: center;
+      color: #555;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.25rem;
+    }
+
+    .post {
+      padding: 16px 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .post:last-child { border-bottom: 0; }
+
+    .post-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .post-name {
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .post-date {
+      flex-shrink: 0;
+      font-size: 0.8rem;
+      color: #777;
+    }
+
+    .post-message {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .empty {
+      margin: 8px 0 0;
+      color: #777;
+      text-align: center;
+    }
+
+    @media (max-width: 520px) {
+      .container { padding-top: 22px; }
+      .card { padding: 15px; }
+      .post-header {
+        display: block;
+      }
+      .post-date {
+        display: block;
+        margin-top: 2px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>みんなのひとことボード</h1>
+
+    <section class="card" aria-label="投稿フォーム">
+      <form id="postForm">
+        <div class="field">
+          <label for="name">名前</label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            maxlength="50"
+            autocomplete="name"
+            required
+          />
+        </div>
+
+        <div class="field">
+          <label for="message">ひとこと</label>
+          <textarea
+            id="message"
+            name="message"
+            maxlength="140"
+            required
+          ></textarea>
+          <div class="counter"><span id="charCount">0</span>/140</div>
+        </div>
+
+        <button id="submitButton" type="submit">投稿する</button>
+      </form>
+    </section>
+
+    <div id="status" role="status" aria-live="polite"></div>
+
+    <section class="card" aria-label="投稿一覧">
+      <h2>みんなの投稿</h2>
+      <div id="posts"></div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = "https://rjntqjzclcskfirmhloz.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_odDPR0xsx9Bgj4yDt5id-A_yda8lTtf";
+
+    const db = supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY
+    );
+
+    const form = document.getElementById("postForm");
+    const nameInput = document.getElementById("name");
+    const messageInput = document.getElementById("message");
+    const submitButton = document.getElementById("submitButton");
+    const postsElement = document.getElementById("posts");
+    const statusElement = document.getElementById("status");
+    const charCount = document.getElementById("charCount");
+
+    messageInput.addEventListener("input", () => {
+      charCount.textContent = messageInput.value.length;
+    });
+
+    function setStatus(message) {
+      statusElement.textContent = message;
+    }
+
+    function formatDate(dateString) {
+      const date = new Date(dateString);
+      return new Intl.DateTimeFormat("ja-JP", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(date);
+    }
+
+    function renderPosts(posts) {
+      postsElement.replaceChildren();
+
+      if (!posts.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "まだ投稿はありません。";
+        postsElement.appendChild(empty);
+        return;
+      }
+
+      posts.forEach((post) => {
+        const article = document.createElement("article");
+        article.className = "post";
+
+        const header = document.createElement("div");
+        header.className = "post-header";
+
+        const name = document.createElement("div");
+        name.className = "post-name";
+        name.textContent = post.name;
+
+        const date = document.createElement("time");
+        date.className = "post-date";
+        date.dateTime = post.created_at;
+        date.textContent = formatDate(post.created_at);
+
+        const message = document.createElement("p");
+        message.className = "post-message";
+        message.textContent = post.message;
+
+        header.append(name, date);
+        article.append(header, message);
+        postsElement.appendChild(article);
+      });
+    }
+
+    async function loadPosts() {
+      setStatus("読み込み中です…");
+
+      const { data, error } = await db
+        .from("posts")
+        .select("name, message, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error(error);
+        setStatus("投稿を読み込めませんでした。");
+        return;
+      }
+
+      renderPosts(data ?? []);
+      setStatus("");
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const name = nameInput.value.trim();
+      const message = messageInput.value.trim();
+
+      if (!name || !message) {
+        setStatus("名前とひとことを入力してください。");
+        return;
+      }
+
+      if (message.length > 140) {
+        setStatus("ひとことは140文字以内で入力してください。");
+        return;
+      }
+
+      submitButton.disabled = true;
+      setStatus("投稿中です…");
+
+      const { error } = await db
+        .from("posts")
+        .insert([{ name, message }]);
+
+      if (error) {
+        console.error(error);
+        setStatus("投稿に失敗しました。");
+        submitButton.disabled = false;
+        return;
+      }
+
+      form.reset();
+      charCount.textContent = "0";
+      submitButton.disabled = false;
+
+      await loadPosts();
+    });
+
+    loadPosts();
+  </script>
+</body>
+</html>
